@@ -84,7 +84,7 @@ with st.sidebar:
     
     selected_model = st.selectbox(
         "Выбери интеллект:",
-        ["llama-3.1-70b-versatile"],
+        ["llama-3.3-70b-versatile"],
         index=0
     )
     
