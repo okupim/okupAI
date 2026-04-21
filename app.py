@@ -2,80 +2,141 @@ import streamlit as st
 from groq import Groq
 import os
 
-# Настройка страницы
-st.set_page_config(page_title="okupAi", page_icon="💜", layout="centered")
+# --- КОНФИГУРАЦИЯ СТРАНИЦЫ ---
+st.set_page_config(
+    page_title="okupAi", 
+    page_icon="💜", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Кастомный CSS для фиолетово-черного дизайна
+# --- СТИЛИЗАЦИЯ (CSS) ---
 st.markdown("""
-    <style>
+<style>
+    /* Основной фон в стиле Deep Dark */
     .stApp {
-        background-color: #0E1117;
+        background-color: #0b0d11;
+        color: #e5e7eb;
     }
+    
+    /* Боковая панель */
+    [data-testid="stSidebar"] {
+        background-color: #161a23;
+        border-right: 1px solid #2d333b;
+    }
+
+    /* Пузыри сообщений */
     .stChatMessage {
-        border-radius: 15px;
-        padding: 10px;
-        margin-bottom: 10px;
-        animation: fadeIn 0.5s;
+        background-color: transparent !important;
+        padding: 1rem 0;
+        border-bottom: 1px solid #1f2937;
     }
+    
+    /* Контейнер для текста ИИ */
+    .stMarkdown p {
+        font-size: 1.05rem;
+        line-height: 1.6;
+        color: #d1d5db;
+    }
+
+    /* Анимация появления  */
     @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
+        from { opacity: 0; transform: translateY(5px); }
         to { opacity: 1; transform: translateY(0); }
     }
-    /* Фиолетовый акцент для кнопок и заголовков */
-    h1, .stButton>button {
-        color: #8B5CF6 !important;
+    .stChatMessage {
+        animation: fadeIn 0.4s ease-out;
     }
+
+    /* Кастомная кнопка "Очистить" */
     .stButton>button {
+        width: 100%;
+        border-radius: 10px;
         border: 1px solid #8B5CF6;
-        background-color: transparent;
+        background-color: #1e1b4b;
+        color: white;
+        transition: 0.3s;
     }
     .stButton>button:hover {
         background-color: #8B5CF6;
-        color: white !important;
+        border-color: #a78bfa;
     }
-    </style>
-    """, unsafe_allow_html=True)
 
-st.title("💜 okupAi")
+    /* Убираем лишние отступы сверху */
+    .block-container {
+        padding-top: 2rem !important;
+        max-width: 800px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# Инициализация Groq 
-client = Groq(api_key=st.secrets.get("GROQ_API_KEY", "no_key"))
+# --- ИНИЦИАЛИЗАЦИЯ ---
+API_KEY = st.secrets.get("GROQ_API_KEY", "ТВОЙ_КЛЮЧ_ТУТ")
+client = Groq(api_key=API_KEY)
 
-# Хранилище истории чата
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Отображение сообщений
+# --- БОКОВАЯ ПАНЕЛЬ (НАСТРОЙКИ) ---
+with st.sidebar:
+    st.title("💜 okupAi Settings")
+    st.markdown("---")
+    
+    selected_model = st.selectbox(
+        "Выбери интеллект:",
+        ["llama-3.1-70b-versatile"],
+        index=0
+    )
+    
+    temp = st.slider("Креативность (Temperature):", 0.0, 1.0, 0.7)
+    
+    st.markdown("---")
+    if st.button("🗑 Очистить историю чата"):
+        st.session_state.messages = []
+        st.rerun()
+
+    st.info("okupAi v2.0 | Работает на Groq API")
+
+# --- ГЛАВНЫЙ ИНТЕРФЕЙС ---
+st.title("okupAi")
+
+# Отображение истории сообщений
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    avatar = "👤" if message["role"] == "user" else "💜"
+    with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
 
-# Логика ввода
-if prompt := st.chat_input("Спроси у okupAi..."):
-    # Добавляем сообщение пользователя
+# Поле ввода (как в Gemini)
+if prompt := st.chat_input("Спроси что-нибудь у okupAi..."):
+    # Отображаем сообщение пользователя
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar="👤"):
         st.markdown(prompt)
 
-    # Ответ ИИ
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
+    # Генерация ответа
+    with st.chat_message("assistant", avatar="💜"):
+        placeholder = st.empty()
         full_response = ""
         
         try:
-            with st.spinner("okupAi думает..."):
-                completion = client.chat.completions.create(
-                    model="llama3-8b-8192",
-                    messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-                    stream=True,
-                )
-                
-                for chunk in completion:
-                    full_response += (chunk.choices[0].delta.content or "")
-                    message_placeholder.markdown(full_response + "▌")
-                
-                message_placeholder.markdown(full_response)
+            stream = client.chat.completions.create(
+                model=selected_model,
+                messages=[
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.messages
+                ],
+                temperature=temp,
+                stream=True,
+            )
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    full_response += chunk.choices[0].delta.content
+                    placeholder.markdown(full_response + "▌")
+            
+            placeholder.markdown(full_response)
         except Exception as e:
-            st.error(f"Ошибка: {e}")
+            st.error(f"Произошла ошибка: {e}")
+            full_response = "Извини, я не смог обработать запрос."
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
